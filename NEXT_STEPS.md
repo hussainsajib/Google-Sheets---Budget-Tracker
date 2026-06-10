@@ -35,9 +35,8 @@ npm run watch     # auto-push on save (Ctrl+C to stop)
 
 ## ☐ 4. Push to GitHub
 ```bash
-git branch -M main
 git remote add origin https://github.com/<you>/budget-tracker.git
-git push -u origin main
+git push -u origin master
 ```
 
 ## ☐ 5. Enable CI auto-deploy
