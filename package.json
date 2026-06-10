@@ -1,0 +1,20 @@
+{
+  "name": "budget-tracker",
+  "version": "1.0.0",
+  "description": "Generic Google Sheets budget tracker (Apps Script).",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "watch": "clasp push --watch",
+    "deploy": "npm test && clasp push",
+    "open": "clasp open"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "jest": "^29.7.0"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

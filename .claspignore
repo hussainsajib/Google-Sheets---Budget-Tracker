@@ -1,0 +1,7 @@
+# Only files NOT listed here are pushed to Apps Script.
+# rootDir is src/, so paths are relative to src/.
+**/**
+!Code.gs
+!lib.js
+!SetupWizard.html
+!appsscript.json

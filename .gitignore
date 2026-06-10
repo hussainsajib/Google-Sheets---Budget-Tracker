@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+*.log
+
+# clasp OAuth token — NEVER commit (this is the secret).
+# Lives in your home dir (~/.clasprc.json); a local copy may appear here.
+.clasprc.json
+
+# NOTE: .clasp.json (scriptId + rootDir) is NOT ignored — commit it so
+# teammates and CI know which Apps Script project to push to.

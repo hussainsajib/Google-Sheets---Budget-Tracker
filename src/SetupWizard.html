@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budget Tracker Setup Wizard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      background: #F5F5F5;
+      color: #212121;
+      overflow-x: hidden;
+    }
+
+    /* ── Progress bar ──────────────────────────────────── */
+    #progress-bar-wrap { background: #E8EAF6; height: 6px; width: 100%; position: sticky; top: 0; z-index: 100; }
+    #progress-bar { height: 100%; background: #1A237E; transition: width 0.35s ease; border-radius: 0 3px 3px 0; }
+
+    /* ── Step indicator ────────────────────────────────── */
+    #step-indicator {
+      display: flex; justify-content: center; gap: 8px;
+      padding: 10px 16px 6px; background: #fff; border-bottom: 1px solid #E0E0E0;
+    }
+    .step-dot { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9E9E9E; }
+    .step-dot .dot {
+      width: 22px; height: 22px; border-radius: 50%; background: #E0E0E0; color: #9E9E9E;
+      font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;
+      transition: background 0.25s, color 0.25s;
+    }
+    .step-dot.active .dot { background: #1A237E; color: #fff; }
+    .step-dot.done   .dot { background: #2E7D32; color: #fff; }
+    .step-dot.active      { color: #1A237E; font-weight: 600; }
+    .step-dot.done        { color: #2E7D32; }
+    .step-connector { flex: 1; height: 2px; background: #E0E0E0; align-self: center; max-width: 24px; border-radius: 1px; }
+    .step-connector.done { background: #2E7D32; }
+
+    /* ── Wizard body ───────────────────────────────────── */
+    #wizard-body { padding: 14px 16px; max-height: 490px; overflow-y: auto; }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+
+    h2 { font-size: 15px; font-weight: 700; color: #1A237E; margin-bottom: 4px; }
+    .sub { font-size: 11px; color: #757575; margin-bottom: 14px; }
+
+    /* ── Form fields ───────────────────────────────────── */
+    .field-group { margin-bottom: 12px; }
+    .field-group label { display: block; font-weight: 600; font-size: 11px; color: #424242; margin-bottom: 4px; }
+    .field-group input[type="text"],
+    .field-group input[type="number"],
+    .field-group select {
+      width: 100%; padding: 7px 10px; border: 1px solid #BDBDBD; border-radius: 5px;
+      font-size: 13px; color: #212121; background: #fff; transition: border-color 0.2s; outline: none;
+    }
+    .field-group input:focus,
+    .field-group select:focus { border-color: #3949AB; box-shadow: 0 0 0 2px #E8EAF6; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* ── Category checkboxes ───────────────────────────── */
+    .cat-list { display: flex; flex-direction: column; gap: 4px; }
+    .cat-item {
+      display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+      border-radius: 4px; background: #FAFAFA; border: 1px solid #EEEEEE;
+    }
+    .cat-item input[type="checkbox"] { cursor: pointer; width: 14px; height: 14px; accent-color: #1A237E; }
+    .cat-item .cat-label { flex: 1; font-size: 12px; }
+    .cat-item .cat-amount {
+      width: 90px; padding: 4px 6px; border: 1px solid #BDBDBD;
+      border-radius: 4px; font-size: 12px; text-align: right;
+    }
+    .cat-item .currency-sym { font-size: 12px; color: #757575; }
+
+    /* ── Group sections ────────────────────────────────── */
+    .group-section { margin-bottom: 12px; }
+    .group-header {
+      font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 5px 10px; border-radius: 4px; margin-bottom: 5px; color: #fff;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .group-subtotal {
+      font-size: 12px; font-weight: 700; background: rgba(0,0,0,0.18);
+      border-radius: 10px; padding: 1px 9px; letter-spacing: 0;
+      text-transform: none; white-space: nowrap;
+    }
+    .group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+
+    /* ── Custom rows ───────────────────────────────────── */
+    .add-custom-btn {
+      margin-top: 6px; font-size: 11px; color: #3949AB; cursor: pointer;
+      background: none; border: 1px dashed #9FA8DA; border-radius: 4px;
+      padding: 5px 10px; width: 100%; text-align: center;
+    }
+    .add-custom-btn:hover { background: #E8EAF6; }
+    .custom-row { display: flex; gap: 6px; margin-top: 4px; align-items: center; }
+    .custom-row input[type="text"]   { flex: 1; padding: 5px 8px; border: 1px solid #BDBDBD; border-radius: 4px; font-size: 12px; }
+    .custom-row input[type="number"] { width: 90px; padding: 5px 8px; border: 1px solid #BDBDBD; border-radius: 4px; font-size: 12px; text-align: right; }
+    .custom-row .remove-btn { background: none; border: none; cursor: pointer; color: #E53935; font-size: 16px; line-height: 1; padding: 2px 4px; }
+
+    /* ── Budget bar (Step 3) ───────────────────────────── */
+    #budget-bar {
+      position: sticky; top: 0; z-index: 50; background: #1A237E; color: #fff;
+      border-radius: 6px; padding: 8px 12px; margin-bottom: 12px;
+      display: flex; align-items: center; font-size: 12px;
+    }
+    .bbar-item { flex: 1; text-align: center; padding: 2px 8px; }
+    .bbar-item + .bbar-item { border-left: 1px solid rgba(255,255,255,0.2); }
+    .bbar-label { font-size: 10px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+    .bbar-value { font-size: 14px; font-weight: 700; letter-spacing: 0.2px; }
+    .bbar-net-positive { color: #A5D6A7; }
+    .bbar-net-negative { color: #EF9A9A; }
+    .bbar-bar-wrap { width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+    .bbar-bar-fill { height: 100%; border-radius: 2px; transition: width 0.25s ease, background 0.25s ease; }
+
+    /* ── Spinner ───────────────────────────────────────── */
+    .spinner-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 0; gap: 14px; }
+    .spinner { width: 36px; height: 36px; border: 4px solid #E8EAF6; border-top-color: #1A237E; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-wrap p { font-size: 13px; color: #546E7A; }
+
+    /* ── Review ────────────────────────────────────────── */
+    .review-card { background: #E8EAF6; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+    .review-card h3 { font-size: 13px; color: #1A237E; margin-bottom: 8px; }
+    .review-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #C5CAE9; }
+    .review-row:last-child { border-bottom: none; }
+    .review-row .val { font-weight: 700; }
+    .net-positive { color: #2E7D32; }
+    .net-negative { color: #C62828; }
+
+    .warning-box { background: #FFF8E1; border: 1px solid #FFD54F; border-radius: 6px; padding: 10px 12px; font-size: 11px; color: #E65100; margin-bottom: 12px; }
+    .error-box   { background: #FFEBEE; border: 1px solid #EF9A9A; border-radius: 6px; padding: 12px; font-size: 12px; color: #C62828; margin-bottom: 12px; }
+
+    /* ── Success ───────────────────────────────────────── */
+    .success-card { text-align: center; padding: 24px 16px; }
+    .success-icon { font-size: 48px; margin-bottom: 10px; }
+    .success-card h2 { color: #2E7D32; margin-bottom: 6px; }
+    .success-card p  { font-size: 12px; color: #546E7A; margin-bottom: 18px; }
+
+    /* ── Footer ────────────────────────────────────────── */
+    #wizard-footer {
+      position: sticky; bottom: 0; background: #fff; border-top: 1px solid #E0E0E0;
+      padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    }
+    .btn { padding: 8px 18px; border-radius: 5px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, background 0.15s; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary   { background: #1A237E; color: #fff; }
+    .btn-primary:hover:not(:disabled)   { background: #283593; }
+    .btn-secondary { background: #E8EAF6; color: #1A237E; border: 1px solid #9FA8DA; }
+    .btn-secondary:hover:not(:disabled) { background: #C5CAE9; }
+    .btn-success   { background: #2E7D32; color: #fff; }
+    .btn-success:hover:not(:disabled)   { background: #1B5E20; }
+
+    .validation-msg { font-size: 11px; color: #C62828; display: none; }
+    .validation-msg.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="progress-bar-wrap"><div id="progress-bar" style="width:25%"></div></div>
+
+<div id="step-indicator">
+  <div class="step-dot active" id="sdot-1"><div class="dot">1</div><span>Basic Info</span></div>
+  <div class="step-connector" id="scon-1"></div>
+  <div class="step-dot" id="sdot-2"><div class="dot">2</div><span>Income</span></div>
+  <div class="step-connector" id="scon-2"></div>
+  <div class="step-dot" id="sdot-3"><div class="dot">3</div><span>Expenses</span></div>
+  <div class="step-connector" id="scon-3"></div>
+  <div class="step-dot" id="sdot-4"><div class="dot">4</div><span>Review</span></div>
+</div>
+
+<div id="wizard-body">
+
+  <!-- STEP 1: Basic Info -->
+  <div class="step-panel active" id="step-1">
+    <h2>Basic Information</h2>
+    <p class="sub">Set up your budget period and currency</p>
+
+    <div class="field-group">
+      <label for="f-title">Budget Title</label>
+      <input type="text" id="f-title" placeholder="My Budget 2026" maxlength="80" />
+    </div>
+
+    <div class="row-2">
+      <div class="field-group">
+        <label for="f-currency">Currency Symbol</label>
+        <input type="text" id="f-currency" placeholder="$" maxlength="3" value="$" />
+      </div>
+      <div class="field-group">
+        <label for="f-num-months">Number of Months</label>
+        <select id="f-num-months">
+          <option value="1">1 month</option>
+          <option value="2">2 months</option>
+          <option value="3">3 months</option>
+          <option value="6">6 months</option>
+          <option value="9">9 months</option>
+          <option value="12" selected>12 months</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row-2">
+      <div class="field-group">
+        <label for="f-start-month">Start Month</label>
+        <select id="f-start-month">
+          <option value="1">January</option><option value="2">February</option>
+          <option value="3">March</option><option value="4">April</option>
+          <option value="5">May</option><option value="6">June</option>
+          <option value="7">July</option><option value="8">August</option>
+          <option value="9">September</option><option value="10">October</option>
+          <option value="11">November</option><option value="12">December</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="f-start-year">Start Year</label>
+        <select id="f-start-year"></select>
+      </div>
+    </div>
+
+    <span class="validation-msg" id="val-step1"></span>
+  </div>
+
+  <!-- STEP 2: Income -->
+  <div class="step-panel" id="step-2">
+    <h2>Income Sources</h2>
+    <p class="sub">Check all that apply and set monthly amounts</p>
+
+    <div id="income-loading" class="spinner-wrap">
+      <div class="spinner"></div><p>Loading presets…</p>
+    </div>
+    <div id="income-list" class="cat-list" style="display:none"></div>
+    <button class="add-custom-btn" id="add-income-btn" style="display:none">+ Add custom income source</button>
+    <div id="custom-income-rows"></div>
+    <span class="validation-msg" id="val-step2"></span>
+  </div>
+
+  <!-- STEP 3: Expenses -->
+  <div class="step-panel" id="step-3">
+    <h2>Expense Categories</h2>
+    <p class="sub">Check what you spend on — watch the budget bar to stay within your income</p>
+
+    <div id="budget-bar">
+      <div class="bbar-item">
+        <div class="bbar-label">Monthly Income</div>
+        <div class="bbar-value" id="bbar-income">—</div>
+      </div>
+      <div class="bbar-item">
+        <div class="bbar-label">Expenses Selected</div>
+        <div class="bbar-value" id="bbar-expenses">—</div>
+        <div class="bbar-bar-wrap"><div class="bbar-bar-fill" id="bbar-fill" style="width:0%;background:#A5D6A7"></div></div>
+      </div>
+      <div class="bbar-item">
+        <div class="bbar-label">Remaining</div>
+        <div class="bbar-value" id="bbar-net">—</div>
+      </div>
+    </div>
+
+    <div id="expense-loading" class="spinner-wrap">
+      <div class="spinner"></div><p>Loading categories…</p>
+    </div>
+    <div id="expense-groups" style="display:none"></div>
+    <span class="validation-msg" id="val-step3"></span>
+  </div>
+
+  <!-- STEP 4: Review & Create -->
+  <div class="step-panel" id="step-4">
+    <h2>Review &amp; Create</h2>
+    <p class="sub">Confirm your settings before building the tracker</p>
+
+    <div class="review-card" id="review-content"></div>
+
+    <div class="warning-box">⚠ This will create or replace sheets in this spreadsheet. Existing data may be lost.</div>
+
+    <div class="error-box" id="create-error" style="display:none"></div>
+
+    <div id="creating-spinner" class="spinner-wrap" style="display:none">
+      <div class="spinner"></div><p>Building your budget tracker…</p>
+    </div>
+
+    <div id="success-card" class="success-card" style="display:none">
+      <div class="success-icon">✅</div>
+      <h2>Your budget tracker is ready!</h2>
+      <p>Start by logging a transaction on the Input sheet.</p>
+      <button class="btn btn-success" onclick="google.script.host.close()">Open Tracker →</button>
+    </div>
+
+    <span class="validation-msg" id="val-step4"></span>
+  </div>
+
+</div>
+
+<div id="wizard-footer">
+  <span class="validation-msg" id="val-footer"></span>
+  <div style="display:flex;gap:8px;margin-left:auto">
+    <button class="btn btn-secondary" id="btn-back"   onclick="prevStep()" style="display:none">← Back</button>
+    <button class="btn btn-primary"   id="btn-next"   onclick="nextStep()">Next →</button>
+    <button class="btn btn-primary"   id="btn-create" onclick="createBudget()" style="display:none">✓ Create My Budget</button>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+let currentStep  = 1;
+const TOTAL_STEPS = 4;
+let presetsLoaded = false;
+
+const GROUP_COLORS = {
+  Housing: "#3F51B5", Transportation: "#E53935", Food: "#43A047",
+  Utilities: "#8E24AA", Health: "#00ACC1", Personal: "#FB8C00",
+  Financial: "#1E88E5", Lifestyle: "#D81B60", Other: "#6D4C41",
+};
+
+// ── Init ─────────────────────────────────────────────────────
+(function init() {
+  const yr  = new Date().getFullYear();
+  const sel = document.getElementById("f-start-year");
+  for (let y = yr - 2; y <= yr + 2; y++) {
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = y;
+    if (y === yr) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  document.getElementById("f-start-month").value = new Date().getMonth() + 1;
+  document.getElementById("f-title").value = "My Budget " + yr;
+})();
+
+// ── Navigation ───────────────────────────────────────────────
+function updateUI() {
+  for (let s = 1; s <= TOTAL_STEPS; s++) {
+    document.getElementById("step-" + s).classList.toggle("active", s === currentStep);
+    const dot = document.getElementById("sdot-" + s);
+    dot.classList.toggle("active", s === currentStep);
+    dot.classList.toggle("done",   s < currentStep);
+  }
+  for (let s = 1; s < TOTAL_STEPS; s++) {
+    document.getElementById("scon-" + s).classList.toggle("done", s < currentStep);
+  }
+  document.getElementById("progress-bar").style.width = (currentStep / TOTAL_STEPS * 100) + "%";
+  document.getElementById("btn-back").style.display   = currentStep > 1 ? "inline-flex" : "none";
+  document.getElementById("btn-next").style.display   = currentStep < TOTAL_STEPS ? "inline-flex" : "none";
+  document.getElementById("btn-create").style.display = currentStep === TOTAL_STEPS ? "inline-flex" : "none";
+
+  if (currentStep === 2 && !presetsLoaded) loadPresets();
+  if (currentStep === 3) updateBudgetBar();   // refresh when entering step 3
+  if (currentStep === TOTAL_STEPS) buildReview();
+}
+
+function nextStep() { if (!validateStep(currentStep)) return; currentStep++; updateUI(); document.getElementById("wizard-body").scrollTop = 0; }
+function prevStep() { currentStep--; updateUI(); document.getElementById("wizard-body").scrollTop = 0; }
+
+// ── Validation ───────────────────────────────────────────────
+function showVal(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.classList.add("visible"); } }
+function hideVal(id)       { const el = document.getElementById(id); if (el) { el.textContent = ""; el.classList.remove("visible"); } }
+
+function validateStep(step) {
+  hideVal("val-step" + step);
+  if (step === 1) {
+    if (!document.getElementById("f-title").value.trim()) { showVal("val-step1", "Please enter a budget title."); return false; }
+    return true;
+  }
+  if (step === 2) {
+    const checked = document.querySelectorAll('#income-list .cat-item input[type="checkbox"]:checked').length;
+    const customs = [...document.querySelectorAll(".custom-income-name")].filter(i => i.value.trim()).length;
+    if (!checked && !customs) { showVal("val-step2", "Select at least one income source."); return false; }
+    return true;
+  }
+  if (step === 3) {
+    const checked = document.querySelectorAll('#expense-groups .cat-item input[type="checkbox"]:checked').length;
+    const customs = [...document.querySelectorAll(".custom-expense-name")].filter(i => i.value.trim()).length;
+    if (checked + customs < 3) { showVal("val-step3", "Select at least 3 expense categories."); return false; }
+    return true;
+  }
+  return true;
+}
+
+// ── Load presets ─────────────────────────────────────────────
+function loadPresets() {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      presetsLoaded = true;
+      renderIncome(data.income);
+      renderExpenses(data.expenses);
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("income-loading").innerHTML =
+        '<p style="color:#C62828">Error loading presets: ' + (err.message || err) + '</p>';
+    })
+    .getPresets();
+}
+
+// ── Render income (Step 2) ───────────────────────────────────
+function renderIncome(items) {
+  document.getElementById("income-loading").style.display = "none";
+  const list = document.getElementById("income-list");
+  list.style.display = "block";
+  list.innerHTML = "";
+  const cur = document.getElementById("f-currency").value || "$";
+
+  items.forEach(function(item, i) {
+    const div = document.createElement("div");
+    div.className = "cat-item";
+    div.innerHTML =
+      '<input type="checkbox" id="inc-' + i + '" ' + (item.on ? "checked" : "") + ' />' +
+      '<label class="cat-label" for="inc-' + i + '">' + escHtml(item.label) + '</label>' +
+      '<span class="currency-sym">' + escHtml(cur) + '</span>' +
+      '<input type="number" class="cat-amount" id="inc-amt-' + i + '" min="0" step="0.01" value="' + item.amount + '" />';
+    // Wire listeners so budget bar updates when income changes
+    div.querySelector('input[type="checkbox"]').addEventListener("change", updateBudgetBar);
+    div.querySelector('.cat-amount').addEventListener("input", updateBudgetBar);
+    list.appendChild(div);
+  });
+
+  document.getElementById("add-income-btn").style.display = "block";
+}
+
+document.getElementById("add-income-btn").addEventListener("click", function() {
+  const cur = document.getElementById("f-currency").value || "$";
+  const row = document.createElement("div");
+  row.className = "custom-row";
+  row.innerHTML =
+    '<input type="text" class="custom-income-name" placeholder="Income source name" />' +
+    '<span class="currency-sym">' + escHtml(cur) + '</span>' +
+    '<input type="number" class="custom-income-amount" min="0" step="0.01" value="0" />' +
+    '<button class="remove-btn" title="Remove">×</button>';
+  row.querySelector(".custom-income-amount").addEventListener("input", updateBudgetBar);
+  row.querySelector(".remove-btn").addEventListener("click", function() { row.remove(); updateBudgetBar(); });
+  document.getElementById("custom-income-rows").appendChild(row);
+  updateBudgetBar();
+});
+
+// ── Render expenses (Step 3) ─────────────────────────────────
+function renderExpenses(expenseGroups) {
+  document.getElementById("expense-loading").style.display = "none";
+  const container = document.getElementById("expense-groups");
+  container.style.display = "block";
+  container.innerHTML = "";
+  const cur = document.getElementById("f-currency").value || "$";
+
+  Object.entries(expenseGroups).forEach(function([groupName, items]) {
+    const safeG    = groupName.replace(/[^a-zA-Z0-9]/g, "_");
+    const hdrColor = GROUP_COLORS[groupName] || "#555";
+
+    const section = document.createElement("div");
+    section.className = "group-section";
+    section.innerHTML =
+      '<div class="group-header" style="background:' + hdrColor + '">' +
+        '<span>' + escHtml(groupName) + '</span>' +
+        '<span class="group-subtotal" id="gsubt-' + safeG + '">$0.00</span>' +
+      '</div>';
+
+    const grid = document.createElement("div");
+    grid.className = "group-grid";
+
+    items.forEach(function(item, i) {
+      const id  = "exp-" + safeG + "-" + i;
+      const div = document.createElement("div");
+      div.className = "cat-item";
+      div.innerHTML =
+        '<input type="checkbox" id="' + id + '" data-group="' + escHtml(groupName) + '" ' + (item.on ? "checked" : "") + ' />' +
+        '<label class="cat-label" for="' + id + '">' + escHtml(item.label) + '</label>' +
+        '<span class="currency-sym">' + escHtml(cur) + '</span>' +
+        '<input type="number" class="cat-amount" id="' + id + '-amt" min="0" step="0.01" value="' + item.amount + '" />';
+      div.querySelector('input[type="checkbox"]').addEventListener("change", updateBudgetBar);
+      div.querySelector('.cat-amount').addEventListener("input", updateBudgetBar);
+      grid.appendChild(div);
+    });
+
+    section.appendChild(grid);
+
+    const customContainer = document.createElement("div");
+    customContainer.dataset.group = groupName;
+
+    const addBtn = document.createElement("button");
+    addBtn.className = "add-custom-btn";
+    addBtn.textContent = "+ Add custom " + groupName + " category";
+    addBtn.addEventListener("click", function() { addCustomExpenseRow(customContainer, groupName, cur); });
+
+    section.appendChild(addBtn);
+    section.appendChild(customContainer);
+    container.appendChild(section);
+  });
+
+  updateBudgetBar(); // initial paint after all items rendered
+}
+
+function addCustomExpenseRow(container, groupName, cur) {
+  const row = document.createElement("div");
+  row.className = "custom-row";
+  row.innerHTML =
+    '<input type="text" class="custom-expense-name" data-group="' + escHtml(groupName) + '" placeholder="Category name" />' +
+    '<span class="currency-sym">' + escHtml(cur) + '</span>' +
+    '<input type="number" class="custom-expense-amount" min="0" step="0.01" value="0" />' +
+    '<button class="remove-btn" title="Remove">×</button>';
+  row.querySelector(".custom-expense-amount").addEventListener("input", updateBudgetBar);
+  row.querySelector(".remove-btn").addEventListener("click", function() { row.remove(); updateBudgetBar(); });
+  container.appendChild(row);
+  updateBudgetBar();
+}
+
+// ── Budget bar ───────────────────────────────────────────────
+function getIncomeTotal() {
+  let total = 0;
+  document.querySelectorAll('#income-list .cat-item').forEach(function(item) {
+    const cb  = item.querySelector('input[type="checkbox"]');
+    const amt = item.querySelector('.cat-amount');
+    if (cb && cb.checked && amt) total += parseFloat(amt.value) || 0;
+  });
+  document.querySelectorAll('.custom-income-name').forEach(function(nameEl) {
+    if (!nameEl.value.trim()) return;
+    const amtEl = nameEl.parentElement.querySelector('.custom-income-amount');
+    if (amtEl) total += parseFloat(amtEl.value) || 0;
+  });
+  return total;
+}
+
+function getExpenseTotal() {
+  let total = 0;
+  document.querySelectorAll('#expense-groups .cat-item').forEach(function(item) {
+    const cb  = item.querySelector('input[type="checkbox"]');
+    const amt = item.querySelector('.cat-amount');
+    if (cb && cb.checked && amt) total += parseFloat(amt.value) || 0;
+  });
+  document.querySelectorAll('.custom-expense-amount').forEach(function(input) {
+    total += parseFloat(input.value) || 0;
+  });
+  return total;
+}
+
+function updateBudgetBar() {
+  const cur      = document.getElementById("f-currency").value || "$";
+  const fmt      = function(v) { return cur + Math.abs(v).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  const income   = getIncomeTotal();
+  const expenses = getExpenseTotal();
+  const net      = income - expenses;
+  const pct      = income > 0 ? Math.min(expenses / income * 100, 100) : 0;
+
+  // Per-group subtotals
+  const groupTotals = {};
+  document.querySelectorAll('#expense-groups .cat-item').forEach(function(item) {
+    const cb  = item.querySelector('input[type="checkbox"]');
+    const amt = item.querySelector('.cat-amount');
+    if (!cb || !amt) return;
+    const g = (cb.dataset.group || "").replace(/[^a-zA-Z0-9]/g, "_");
+    groupTotals[g] = (groupTotals[g] || 0) + (cb.checked ? parseFloat(amt.value) || 0 : 0);
+  });
+  document.querySelectorAll('#expense-groups [data-group]').forEach(function(cont) {
+    const g = (cont.dataset.group || "").replace(/[^a-zA-Z0-9]/g, "_");
+    cont.querySelectorAll('.custom-expense-amount').forEach(function(input) {
+      groupTotals[g] = (groupTotals[g] || 0) + (parseFloat(input.value) || 0);
+    });
+  });
+  Object.entries(groupTotals).forEach(function([g, total]) {
+    const el = document.getElementById("gsubt-" + g);
+    if (el) el.textContent = fmt(total);
+  });
+
+  document.getElementById("bbar-income").textContent   = fmt(income);
+  document.getElementById("bbar-expenses").textContent = fmt(expenses);
+
+  const netEl = document.getElementById("bbar-net");
+  netEl.textContent = (net < 0 ? "−" : "") + fmt(net);
+  netEl.className   = "bbar-value " + (net >= 0 ? "bbar-net-positive" : "bbar-net-negative");
+
+  const fill = document.getElementById("bbar-fill");
+  fill.style.width      = pct + "%";
+  fill.style.background = pct > 100 ? "#EF9A9A" : pct > 85 ? "#FFD54F" : "#A5D6A7";
+}
+
+// ── Build config object ──────────────────────────────────────
+function buildConfig() {
+  const title      = document.getElementById("f-title").value.trim();
+  const currency   = document.getElementById("f-currency").value.trim() || "$";
+  const startMonth = parseInt(document.getElementById("f-start-month").value);
+  const startYear  = parseInt(document.getElementById("f-start-year").value);
+  const numMonths  = parseInt(document.getElementById("f-num-months").value);
+
+  const incomeCategories = [];
+  document.querySelectorAll('#income-list .cat-item').forEach(function(item) {
+    const cb  = item.querySelector('input[type="checkbox"]');
+    const lbl = item.querySelector('.cat-label');
+    const amt = item.querySelector('.cat-amount');
+    if (cb && cb.checked && lbl) incomeCategories.push({ label: lbl.textContent.trim(), budget: parseFloat(amt ? amt.value : 0) || 0 });
+  });
+  document.querySelectorAll('.custom-income-name').forEach(function(input) {
+    const label = input.value.trim();
+    if (!label) return;
+    const amtEl = input.parentElement.querySelector('.custom-income-amount');
+    incomeCategories.push({ label, budget: parseFloat(amtEl ? amtEl.value : 0) || 0 });
+  });
+
+  const expenseCategories = [];
+  document.querySelectorAll('#expense-groups .cat-item').forEach(function(item) {
+    const cb  = item.querySelector('input[type="checkbox"]');
+    const lbl = item.querySelector('.cat-label');
+    const amt = item.querySelector('.cat-amount');
+    if (!cb || !cb.checked || !lbl) return;
+    expenseCategories.push({ label: lbl.textContent.trim(), group: cb.dataset.group || "Other", budget: parseFloat(amt ? amt.value : 0) || 0 });
+  });
+  document.querySelectorAll('.custom-expense-name').forEach(function(input) {
+    const label = input.value.trim();
+    if (!label) return;
+    const amtEl = input.parentElement.querySelector('.custom-expense-amount');
+    expenseCategories.push({ label, group: input.dataset.group || "Other", budget: parseFloat(amtEl ? amtEl.value : 0) || 0 });
+  });
+
+  return { title, currency, startYear, startMonth, numMonths, incomeCategories, expenseCategories };
+}
+
+// ── Review (Step 4) ──────────────────────────────────────────
+function buildReview() {
+  const cfg = buildConfig();
+  const months = ["","January","February","March","April","May","June","July","August","September","October","November","December"];
+  const endIdx  = ((cfg.startMonth - 1 + cfg.numMonths - 1) % 12) + 1;
+  const endYear = cfg.startYear + Math.floor((cfg.startMonth - 1 + cfg.numMonths - 1) / 12);
+  const totalIncome   = cfg.incomeCategories.reduce(function(s, c) { return s + c.budget; }, 0);
+  const totalExpenses = cfg.expenseCategories.reduce(function(s, c) { return s + c.budget; }, 0);
+  const net = totalIncome - totalExpenses;
+  const cur = cfg.currency;
+  const fmt = function(v) { return cur + Math.abs(v).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  document.getElementById("review-content").innerHTML =
+    '<h3>📋 Budget Summary</h3>' +
+    row("Budget title",         escHtml(cfg.title)) +
+    row("Period",               months[cfg.startMonth] + " " + cfg.startYear + " — " + months[endIdx] + " " + endYear + " (" + cfg.numMonths + " months)") +
+    row("Currency",             escHtml(cfg.currency)) +
+    row("Income sources",       cfg.incomeCategories.length + " selected · " + fmt(totalIncome) + "/mo") +
+    row("Expense categories",   cfg.expenseCategories.length + " selected · " + fmt(totalExpenses) + "/mo") +
+    '<div class="review-row"><span>Projected monthly net</span>' +
+      '<span class="val ' + (net >= 0 ? "net-positive" : "net-negative") + '">' + (net < 0 ? "−" : "") + fmt(net) + '/mo</span></div>';
+
+  function row(label, val) { return '<div class="review-row"><span>' + label + '</span><span class="val">' + val + '</span></div>'; }
+}
+
+// ── Create budget ────────────────────────────────────────────
+function createBudget() {
+  document.getElementById("create-error").style.display = "none";
+  document.getElementById("review-content").style.display  = "none";
+  document.querySelector(".warning-box").style.display     = "none";
+  document.getElementById("creating-spinner").style.display = "flex";
+  document.getElementById("btn-back").disabled   = true;
+  document.getElementById("btn-create").disabled = true;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      document.getElementById("creating-spinner").style.display = "none";
+      if (result && result.success) {
+        document.getElementById("success-card").style.display = "block";
+        document.getElementById("btn-back").style.display     = "none";
+        document.getElementById("btn-create").style.display   = "none";
+      } else {
+        showCreateError((result && result.error) ? result.error : "Unknown error.");
+      }
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("creating-spinner").style.display = "none";
+      showCreateError(err.message || String(err));
+    })
+    .saveSetupConfig(buildConfig());
+}
+
+function showCreateError(msg) {
+  document.getElementById("review-content").style.display = "block";
+  document.querySelector(".warning-box").style.display    = "block";
+  const el = document.getElementById("create-error");
+  el.textContent = "Error: " + msg;
+  el.style.display = "block";
+  document.getElementById("btn-back").disabled   = false;
+  document.getElementById("btn-create").disabled = false;
+}
+
+// ── Utility ──────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+updateUI();
+</script>
+</body>
+</html>
