@@ -81,6 +81,7 @@ function onOpen() {
     .createMenu("💰 Budget Tools")
     .addItem("▶ Run Setup Wizard",              "openSetupWizard")
     .addSeparator()
+    .addItem("📥 Import from CSV",               "openCsvImportDialog")
     .addItem("↺ Rebuild Tracker Rows",          "rebuildTrackerRows")
     .addItem("↺ Refresh Dashboard",             "refreshDashboard")
     .addItem("🏷 Apply AutoCat Rules",          "applyAutoCatToTransactions")
@@ -1417,6 +1418,96 @@ function refreshDashboard() {
   SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(
     ss.getSheetByName(SHEET_DASHBOARD)
   );
+}
+
+// ============================================================
+// CSV IMPORT
+// ============================================================
+
+function openCsvImportDialog() {
+  const html = HtmlService.createHtmlOutputFromFile("CsvImport")
+    .setWidth(660)
+    .setHeight(580)
+    .setTitle("Import Transactions from CSV");
+  SpreadsheetApp.getUi().showModalDialog(html, "📥 Import from CSV");
+}
+
+/**
+ * Called from step 1 of the import dialog.
+ * Parses the CSV, auto-detects column mapping, and returns a preview.
+ * @param {string} csvText
+ * @returns {{ headers, preview, mapping, totalRows } | { error }}
+ */
+function parseCsvPreview(csvText) {
+  try {
+    const rows = parseCsv(csvText);
+    if (rows.length < 2) return { error: "CSV must have at least a header row and one data row." };
+    const headers  = rows[0].map(h => String(h).trim());
+    const dataRows = rows.slice(1);
+    return {
+      headers,
+      preview:   dataRows.slice(0, 5),
+      mapping:   autoDetectMapping(headers),
+      totalRows: dataRows.length,
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+/**
+ * Called from step 3 of the import dialog. Parses the CSV, applies the
+ * user-supplied column mapping, and appends valid rows to the Transactions sheet.
+ * AutoCat rules are applied to rows where no category column was mapped.
+ * @param {string} csvText
+ * @param {{ date, description, amount, category, account, notes }} mapping  Column indices (-1 = not mapped)
+ * @param {string} dateFormat  "MDY" | "DMY" | "YMD"
+ * @returns {{ imported, skipped } | { error }}
+ */
+function importCsvRows(csvText, mapping, dateFormat) {
+  try {
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const txWs = ss.getSheetByName(SHEET_TRANSACTIONS);
+    if (!txWs) return { error: "Transactions sheet not found. Run the Setup Wizard first." };
+
+    const rows = parseCsv(csvText);
+    if (rows.length < 2) return { error: "No data rows found in CSV." };
+
+    const rules  = getAutoCatRules();
+    const fmt    = dateFormat || "MDY";
+    const get    = (row, idx) => idx >= 0 && idx < row.length ? String(row[idx]).trim() : "";
+    const newRows = [];
+    let skipped  = 0;
+
+    rows.slice(1).forEach(row => {
+      const rawDate   = get(row, mapping.date);
+      const rawAmount = get(row, mapping.amount);
+      if (!rawDate || !rawAmount) { skipped++; return; }
+
+      const dateStr = normalizeDateString(rawDate, fmt);
+      // Strip currency symbols, spaces, commas; handle parentheses as negative
+      const cleaned = rawAmount.replace(/\(([^)]+)\)/, '-$1').replace(/[^0-9.\-]/g, '');
+      const amount  = parseFloat(cleaned);
+      if (isNaN(amount)) { skipped++; return; }
+
+      const desc    = get(row, mapping.description);
+      let   cat     = get(row, mapping.category);
+      const account = get(row, mapping.account);
+      const notes   = get(row, mapping.notes);
+
+      if (!cat && desc) cat = applyAutoCatRules(desc, rules) || "";
+
+      newRows.push([dateStr, desc, cat, Math.abs(amount), account, notes]);
+    });
+
+    if (newRows.length > 0) {
+      txWs.getRange(txWs.getLastRow() + 1, 1, newRows.length, 6).setValues(newRows);
+    }
+
+    return { imported: newRows.length, skipped };
+  } catch (e) {
+    return { error: e.message };
+  }
 }
 
 // ============================================================

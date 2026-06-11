@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 13px; background: #fff; color: #333; display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Step bar ── */
+    .step-bar { display: flex; background: #1A237E; padding: 0; }
+    .step-bar .step { flex: 1; text-align: center; padding: 10px 4px; color: #7986CB; font-size: 12px; font-weight: bold; border-right: 1px solid #283593; }
+    .step-bar .step:last-child { border-right: none; }
+    .step-bar .step.active { color: #fff; border-bottom: 3px solid #FF8F00; }
+    .step-bar .step.done   { color: #9FA8DA; }
+
+    /* ── Content area ── */
+    .content { flex: 1; overflow-y: auto; padding: 16px 20px 8px; }
+    h3 { font-size: 14px; color: #1A237E; margin-bottom: 8px; }
+    p  { color: #555; margin-bottom: 10px; line-height: 1.5; }
+
+    /* ── File / paste area ── */
+    .file-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .file-btn { background: #3949AB; color: #fff; border: none; padding: 7px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .file-btn:hover { background: #283593; }
+    #file-input { display: none; }
+    .file-name  { font-size: 12px; color: #666; }
+    textarea { width: 100%; height: 130px; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-size: 12px; font-family: monospace; resize: vertical; }
+    textarea:focus { outline: none; border-color: #3949AB; }
+
+    /* ── Mapping table ── */
+    .map-wrap { max-height: 280px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 10px; }
+    table.map-tbl { width: 100%; border-collapse: collapse; }
+    table.map-tbl th { background: #1A237E; color: #fff; font-size: 11px; padding: 6px 8px; text-align: left; position: sticky; top: 0; }
+    table.map-tbl td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+    table.map-tbl tr:last-child td { border-bottom: none; }
+    table.map-tbl tr:nth-child(even) td { background: #FAFAFA; }
+    .col-hdr  { font-weight: bold; color: #333; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .col-samp { color: #777; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
+    select.field-sel { width: 130px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
+    select.field-sel:focus { outline: none; border-color: #3949AB; }
+
+    /* ── Date format row ── */
+    .fmt-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: #555; }
+    .fmt-row select { padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
+
+    /* ── Preview table ── */
+    .preview-wrap { max-height: 220px; overflow: auto; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; }
+    table.prev-tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+    table.prev-tbl th { background: #3949AB; color: #fff; padding: 5px 6px; text-align: left; position: sticky; top: 0; white-space: nowrap; }
+    table.prev-tbl td { padding: 4px 6px; border-bottom: 1px solid #f0f0f0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    table.prev-tbl tr:nth-child(even) td { background: #FAFAFA; }
+    .note { font-size: 11px; color: #888; font-style: italic; margin-bottom: 6px; }
+
+    /* ── Error / success ── */
+    .msg { min-height: 20px; font-size: 12px; color: #C62828; margin-bottom: 6px; }
+    .msg.ok { color: #2E7D32; }
+
+    /* ── Nav bar ── */
+    .nav { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px 12px; border-top: 1px solid #e0e0e0; background: #FAFAFA; }
+    .btn { padding: 7px 18px; border-radius: 4px; border: 1px solid #bbb; background: #fff; cursor: pointer; font-size: 13px; color: #333; }
+    .btn:hover { background: #f5f5f5; }
+    .btn.primary { background: #1A237E; color: #fff; border-color: #1A237E; }
+    .btn.primary:hover { background: #283593; }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+  </style>
+</head>
+<body>
+
+<!-- Step bar -->
+<div class="step-bar">
+  <div class="step active" id="si1">1 — Select File</div>
+  <div class="step"        id="si2">2 — Map Columns</div>
+  <div class="step"        id="si3">3 — Import</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- STEP 1 — Select / paste CSV                        -->
+<!-- ══════════════════════════════════════════════════ -->
+<div id="s1" class="content">
+  <h3>Select or paste your CSV file</h3>
+  <p>Export a CSV from your bank's website, then upload it or paste the contents below.</p>
+  <div class="file-row">
+    <button class="file-btn" onclick="document.getElementById('file-input').click()">📂 Choose File</button>
+    <span class="file-name" id="file-name">No file chosen</span>
+    <input type="file" id="file-input" accept=".csv,.txt" onchange="readFile(this)">
+  </div>
+  <textarea id="csv-text" placeholder="…or paste CSV content here (including the header row)"></textarea>
+  <div class="msg" id="s1-msg"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- STEP 2 — Map columns                               -->
+<!-- ══════════════════════════════════════════════════ -->
+<div id="s2" class="content" style="display:none">
+  <h3>Map CSV columns to transaction fields</h3>
+  <p id="s2-desc"></p>
+  <div class="map-wrap">
+    <table class="map-tbl">
+      <thead><tr><th>CSV Column</th><th>Sample Value</th><th>Maps To</th></tr></thead>
+      <tbody id="map-body"></tbody>
+    </table>
+  </div>
+  <div class="fmt-row">
+    <label for="date-fmt">Date format in CSV:</label>
+    <select id="date-fmt">
+      <option value="MDY">MM/DD/YYYY — US (06/10/2026)</option>
+      <option value="DMY">DD/MM/YYYY — UK/AU (10/06/2026)</option>
+      <option value="YMD">YYYY-MM-DD — ISO (2026-06-10)</option>
+    </select>
+  </div>
+  <div class="msg" id="s2-msg"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- STEP 3 — Preview & import                          -->
+<!-- ══════════════════════════════════════════════════ -->
+<div id="s3" class="content" style="display:none">
+  <h3>Preview &amp; import</h3>
+  <p id="s3-desc"></p>
+  <div class="preview-wrap">
+    <table class="prev-tbl">
+      <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Category</th><th>Account</th><th>Notes</th></tr></thead>
+      <tbody id="preview-body"></tbody>
+    </table>
+  </div>
+  <p class="note">All amounts are imported as positive numbers. AutoCat rules will fill in any empty Category cells.</p>
+  <div class="msg" id="s3-msg"></div>
+</div>
+
+<!-- Nav bar (shared) -->
+<div class="nav">
+  <button class="btn" id="btn-back"   onclick="goBack()">← Back</button>
+  <button class="btn primary" id="btn-next" onclick="goNext()">Next →</button>
+</div>
+
+<script>
+  var csvText   = '';
+  var parsed    = null;   // { headers, preview, mapping, totalRows }
+  var mapping   = null;   // { date, description, amount, category, account, notes }
+  var curStep   = 1;
+
+  var FIELD_OPTS = [
+    { val: 'skip',        label: '— Skip —'     },
+    { val: 'date',        label: 'Date'          },
+    { val: 'description', label: 'Description'   },
+    { val: 'amount',      label: 'Amount'        },
+    { val: 'category',    label: 'Category'      },
+    { val: 'account',     label: 'Account'       },
+    { val: 'notes',       label: 'Notes'         },
+  ];
+
+  // ── File reader ────────────────────────────────────────────
+  function readFile(input) {
+    var f = input.files[0];
+    if (!f) return;
+    document.getElementById('file-name').textContent = f.name;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('csv-text').value = e.target.result;
+    };
+    reader.readAsText(f);
+  }
+
+  // ── Step navigation ────────────────────────────────────────
+  function showStep(n) {
+    [1,2,3].forEach(function(i) {
+      document.getElementById('s'  + i).style.display = (i === n) ? '' : 'none';
+      var si = document.getElementById('si' + i);
+      si.className = 'step' + (i === n ? ' active' : i < n ? ' done' : '');
+    });
+    document.getElementById('btn-back').style.visibility = (n === 1) ? 'hidden' : 'visible';
+    document.getElementById('btn-next').textContent = (n === 3) ? 'Import' : 'Next →';
+    curStep = n;
+  }
+
+  function goBack() {
+    if (curStep > 1) showStep(curStep - 1);
+  }
+
+  function goNext() {
+    if (curStep === 1) step1Next();
+    else if (curStep === 2) step2Next();
+    else if (curStep === 3) doImport();
+  }
+
+  // ── Step 1 → 2 ────────────────────────────────────────────
+  function step1Next() {
+    csvText = document.getElementById('csv-text').value.trim();
+    if (!csvText) { setMsg('s1-msg', 'Please paste or upload a CSV file.'); return; }
+    setMsg('s1-msg', '');
+    setNextDisabled(true);
+    google.script.run
+      .withSuccessHandler(function(r) {
+        setNextDisabled(false);
+        if (r.error) { setMsg('s1-msg', r.error); return; }
+        parsed = r;
+        buildMappingTable();
+        showStep(2);
+      })
+      .withFailureHandler(function(e) { setNextDisabled(false); setMsg('s1-msg', e.message); })
+      .parseCsvPreview(csvText);
+  }
+
+  // ── Build mapping table ────────────────────────────────────
+  function buildMappingTable() {
+    document.getElementById('s2-desc').textContent =
+      parsed.totalRows + ' data row' + (parsed.totalRows !== 1 ? 's' : '') +
+      ' detected. Match each CSV column to a transaction field.';
+
+    var tb = document.getElementById('map-body');
+    tb.innerHTML = '';
+    parsed.headers.forEach(function(hdr, i) {
+      var sample = (parsed.preview[0] && i < parsed.preview[0].length) ? parsed.preview[0][i] : '';
+      var autoVal = 'skip';
+      Object.keys(parsed.mapping).forEach(function(k) { if (parsed.mapping[k] === i) autoVal = k; });
+
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="col-hdr" title="' + esc(hdr) + '">' + esc(hdr) + '</td>' +
+        '<td class="col-samp" title="' + esc(sample) + '">' + esc(sample) + '</td>' +
+        '<td>' + buildSelect(i, autoVal) + '</td>';
+      tb.appendChild(tr);
+    });
+  }
+
+  function buildSelect(colIdx, selectedVal) {
+    var html = '<select class="field-sel" data-col="' + colIdx + '">';
+    FIELD_OPTS.forEach(function(opt) {
+      html += '<option value="' + opt.val + '"' + (opt.val === selectedVal ? ' selected' : '') + '>' + opt.label + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  // ── Step 2 → 3 ────────────────────────────────────────────
+  function step2Next() {
+    mapping = readMapping();
+    if (mapping.date   === -1) { setMsg('s2-msg', 'Please map a Date column.');   return; }
+    if (mapping.amount === -1) { setMsg('s2-msg', 'Please map an Amount column.'); return; }
+    setMsg('s2-msg', '');
+    buildPreview();
+    showStep(3);
+  }
+
+  function readMapping() {
+    var m = { date:-1, description:-1, amount:-1, category:-1, account:-1, notes:-1 };
+    document.querySelectorAll('.field-sel').forEach(function(sel) {
+      var col = parseInt(sel.dataset.col, 10);
+      var field = sel.value;
+      if (field !== 'skip') m[field] = col;
+    });
+    return m;
+  }
+
+  // ── Build preview table ────────────────────────────────────
+  function buildPreview() {
+    var shown = Math.min(5, parsed.preview.length);
+    document.getElementById('s3-desc').textContent =
+      'Importing ' + parsed.totalRows + ' row' + (parsed.totalRows !== 1 ? 's' : '') +
+      '. Showing first ' + shown + ':';
+
+    var tb = document.getElementById('preview-body');
+    tb.innerHTML = '';
+    parsed.preview.forEach(function(row) {
+      var get = function(idx) { return idx >= 0 && idx < row.length ? row[idx] : ''; };
+      var tr = document.createElement('tr');
+      tr.innerHTML = [
+        mapping.date, mapping.description, mapping.amount,
+        mapping.category, mapping.account, mapping.notes
+      ].map(function(idx) {
+        return '<td title="' + esc(get(idx)) + '">' + esc(get(idx)) + '</td>';
+      }).join('');
+      tb.appendChild(tr);
+    });
+  }
+
+  // ── Step 3 — do import ─────────────────────────────────────
+  function doImport() {
+    setMsg('s3-msg', '');
+    setNextDisabled(true);
+    document.getElementById('btn-next').textContent = 'Importing…';
+
+    var fmt = document.getElementById('date-fmt').value;
+    google.script.run
+      .withSuccessHandler(function(r) {
+        setNextDisabled(false);
+        document.getElementById('btn-next').textContent = 'Import';
+        if (r.error) { setMsg('s3-msg', r.error); return; }
+        var txt = '✓ Imported ' + r.imported + ' transaction' + (r.imported !== 1 ? 's' : '');
+        if (r.skipped > 0) txt += ' (' + r.skipped + ' row' + (r.skipped !== 1 ? 's' : '') + ' skipped — missing date or amount)';
+        txt += '.';
+        setMsg('s3-msg', txt, true);
+        document.getElementById('btn-next').textContent = 'Done ✓';
+        setTimeout(function() { google.script.host.close(); }, 2200);
+      })
+      .withFailureHandler(function(e) {
+        setNextDisabled(false);
+        document.getElementById('btn-next').textContent = 'Import';
+        setMsg('s3-msg', e.message);
+      })
+      .importCsvRows(csvText, mapping, fmt);
+  }
+
+  // ── Utilities ──────────────────────────────────────────────
+  function setMsg(id, text, ok) {
+    var el = document.getElementById(id);
+    el.textContent = text;
+    el.className   = 'msg' + (ok ? ' ok' : '');
+  }
+
+  function setNextDisabled(v) {
+    document.getElementById('btn-next').disabled = v;
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Init ───────────────────────────────────────────────────
+  showStep(1);
+</script>
+</body>
+</html>
