@@ -1,4 +1,4 @@
-const { colLetter, buildMonthList, sumIfsFormula } = require("../src/lib.js");
+const { colLetter, buildMonthList, sumIfsFormula, applyAutoCatRules } = require("../src/lib.js");
 
 describe("colLetter", () => {
   test("single-letter columns", () => {
@@ -37,6 +37,70 @@ describe("buildMonthList", () => {
     const m = buildMonthList(2026, 12, 12);
     expect(m[0].label).toBe("Dec-26");
     expect(m[11]).toEqual({ year: 2027, month: 11, label: "Nov-27" });
+  });
+});
+
+describe("applyAutoCatRules", () => {
+  const rules = [
+    { keyword: "uber",       category: "Transport"  },
+    { keyword: "whole foods",category: "Groceries"  },
+    { keyword: "netflix",    category: "Streaming"  },
+  ];
+
+  test("returns null when rules array is empty", () => {
+    expect(applyAutoCatRules("Uber trip", [])).toBeNull();
+  });
+
+  test("returns null when rules is undefined/null", () => {
+    expect(applyAutoCatRules("Uber trip", null)).toBeNull();
+    expect(applyAutoCatRules("Uber trip", undefined)).toBeNull();
+  });
+
+  test("returns null when no rule matches", () => {
+    expect(applyAutoCatRules("random merchant XYZ", rules)).toBeNull();
+  });
+
+  test("matches case-insensitively", () => {
+    expect(applyAutoCatRules("UBER TRIP", rules)).toBe("Transport");
+    expect(applyAutoCatRules("Uber Trip", rules)).toBe("Transport");
+    expect(applyAutoCatRules("uber eats", rules)).toBe("Transport");
+  });
+
+  test("matches substring within a longer description", () => {
+    expect(applyAutoCatRules("Payment to Uber Technologies Inc", rules)).toBe("Transport");
+  });
+
+  test("matches multi-word keyword", () => {
+    expect(applyAutoCatRules("Whole Foods Market #321", rules)).toBe("Groceries");
+  });
+
+  test("returns the first matching rule when multiple rules could match", () => {
+    const overlapping = [
+      { keyword: "amazon",       category: "Shopping"  },
+      { keyword: "amazon prime", category: "Streaming" },
+    ];
+    expect(applyAutoCatRules("Amazon Prime Video charge", overlapping)).toBe("Shopping");
+  });
+
+  test("skips rules with empty keywords", () => {
+    const withEmpty = [
+      { keyword: "",        category: "Shopping"  },
+      { keyword: "netflix", category: "Streaming" },
+    ];
+    expect(applyAutoCatRules("netflix subscription", withEmpty)).toBe("Streaming");
+  });
+
+  test("skips rules with missing category", () => {
+    const noCat = [
+      { keyword: "uber", category: "" },
+      { keyword: "uber", category: "Transport" },
+    ];
+    // first rule matches keyword but has no category — second rule wins
+    expect(applyAutoCatRules("uber trip", noCat)).toBe("Transport");
+  });
+
+  test("empty description matches nothing", () => {
+    expect(applyAutoCatRules("", rules)).toBeNull();
   });
 });
 

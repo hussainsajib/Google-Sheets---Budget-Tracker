@@ -54,7 +54,27 @@ function sumIfsFormula(catRef, monthObj) {
          `Transactions!$A:$A,"<="&EOMONTH(DATE(${y},${mn},1),0)),0)`;
 }
 
+/**
+ * Apply AutoCat rules to a transaction description.
+ * Rules are checked in order; the first keyword match wins.
+ * Matching is case-insensitive substring search.
+ *
+ * @param {string} description  Transaction description
+ * @param {Array}  rules        [{ keyword: string, category: string }, …]
+ * @returns {string|null}  Matched category, or null if no rule matches
+ */
+function applyAutoCatRules(description, rules) {
+  const desc = String(description).toLowerCase();
+  for (const rule of (rules || [])) {
+    const kw  = String(rule.keyword  || "").trim().toLowerCase();
+    const cat = String(rule.category || "").trim();
+    if (!kw || !cat) continue;
+    if (desc.includes(kw)) return cat;
+  }
+  return null;
+}
+
 // ── Node/Jest export (ignored by Apps Script) ────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { colLetter, buildMonthList, sumIfsFormula };
+  module.exports = { colLetter, buildMonthList, sumIfsFormula, applyAutoCatRules };
 }

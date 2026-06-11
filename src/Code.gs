@@ -13,10 +13,11 @@ const SHEET_INPUT        = "Input";        // transaction entry form
 const SHEET_TRACKER      = "Budget Tracker";
 const SHEET_TRANSACTIONS = "Transactions";
 const SHEET_CONFIG       = "Config";       // visible, user-editable configuration sheet
+const SHEET_AUTOCAT      = "AutoCat";      // keyword → category rules
 
 // Fixed row positions in Config sheet (must stay in sync with createConfigSheet)
-const CFG_SETTINGS_START = 3;   // first settings value row
-const CFG_CAT_DATA_START = 11;  // first category data row
+const CFG_SETTINGS_START  = 3;   // first settings value row
+const CFG_CAT_DATA_START  = 11;  // first category data row
 
 // ── Color palette ────────────────────────────────────────────
 const CLR = {
@@ -82,6 +83,7 @@ function onOpen() {
     .addSeparator()
     .addItem("↺ Rebuild Tracker Rows",          "rebuildTrackerRows")
     .addItem("↺ Refresh Dashboard",             "refreshDashboard")
+    .addItem("🏷 Apply AutoCat Rules",          "applyAutoCatToTransactions")
     .addSeparator()
     .addItem("⚙ Rebuild All Sheets",            "rebuildAllSheets")
     .addSeparator()
@@ -257,14 +259,25 @@ function createConfigSheet(ss, config) {
   ws.setColumnWidth(2, 120);  // Type / Setting value
   ws.setColumnWidth(3, 170);  // Group
   ws.setColumnWidth(4, 140);  // Monthly Budget
+  ws.setColumnWidth(5, 20);   // spacer
+  ws.setColumnWidth(6, 200);  // tip col F
+  ws.setColumnWidth(7, 200);  // tip col G
 
-  // ── Row 1: Title ─────────────────────────────────────────
-  ws.setRowHeight(1, 36);
+  // ── Row 1: Title (A–D) + How-to tip (F–G) ────────────────
+  ws.setRowHeight(1, 60);
   ws.getRange(1, 1, 1, 4).merge()
     .setValue("⚙  Budget Configuration")
     .setBackground(CLR.PRIMARY).setFontColor(CLR.WHITE)
     .setFontWeight("bold").setFontSize(14)
     .setHorizontalAlignment("center").setVerticalAlignment("middle");
+
+  ws.getRange(1, 6, 1, 2).merge()
+    .setValue("💡  How to use this sheet:\n" +
+              "• Change a Monthly Budget → Budget Tracker updates immediately.\n" +
+              "• Add / remove category rows → run  💰 Budget Tools › Rebuild Tracker Rows.")
+    .setBackground("#FFF8E1").setFontSize(9).setFontStyle("italic").setFontColor("#555")
+    .setWrap(true).setVerticalAlignment("middle")
+    .setBorder(true, true, true, true, null, null, "#FB8C00", SpreadsheetApp.BorderStyle.SOLID);
 
   // ── Row 2: Settings section header ───────────────────────
   ws.setRowHeight(2, 22);
@@ -326,23 +339,17 @@ function createConfigSheet(ss, config) {
   ws.getRange(CFG_CAT_DATA_START, 2, 100, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(["Income", "Expense"], true)
-      .setAllowInvalid(false).build()
+      .setAllowInvalid(false)
+      .setHelpText("Config sheet › Category Type (col B): must be 'Income' or 'Expense'.")
+      .build()
   );
   ws.getRange(CFG_CAT_DATA_START, 3, 100, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(Object.keys(GROUP_HDR).concat([""]), true)
-      .setAllowInvalid(true).build()
+      .setAllowInvalid(true)
+      .setHelpText("Config sheet › Group (col C): pick an expense group, or leave blank for income categories.")
+      .build()
   );
-
-  // ── Tip row ───────────────────────────────────────────────
-  const tipRow = CFG_CAT_DATA_START + catRows.length + 2;
-  ws.setRowHeight(tipRow, 48);
-  ws.getRange(tipRow, 1, 1, 4).merge()
-    .setValue("💡  How to use this sheet:\n" +
-              "• Change a Monthly Budget → Budget Tracker updates immediately (live formula link).\n" +
-              "• Add / remove category rows → run  💰 Budget Tools › Rebuild Tracker Rows  to refresh tracker layout.")
-    .setBackground("#FFF8E1").setFontSize(9).setFontStyle("italic").setFontColor("#555")
-    .setWrap(true).setVerticalAlignment("middle");
 
   ws.setFrozenRows(10);
 }
@@ -402,9 +409,10 @@ function buildAllSheets(config) {
   createTransactionSheet(ss, config);
   createBudgetTracker(ss, config);
   createDashboard(ss, config);
+  createAutoCatSheet(ss, config);
 
-  // Tab order: Dashboard → Input → Budget Tracker → Transactions → Config
-  [SHEET_DASHBOARD, SHEET_INPUT, SHEET_TRACKER, SHEET_TRANSACTIONS, SHEET_CONFIG].forEach((name, pos) => {
+  // Tab order: Dashboard → Input → Budget Tracker → Transactions → Config → AutoCat
+  [SHEET_DASHBOARD, SHEET_INPUT, SHEET_TRACKER, SHEET_TRANSACTIONS, SHEET_CONFIG, SHEET_AUTOCAT].forEach((name, pos) => {
     const sheet = ss.getSheetByName(name);
     if (sheet) { ss.setActiveSheet(sheet); ss.moveActiveSheet(pos + 1); }
   });
@@ -534,7 +542,9 @@ function createInputSheet(ss, config) {
     ws.getRange("B6").setDataValidation(
       SpreadsheetApp.newDataValidation()
         .requireValueInRange(configWs.getRange(CFG_CAT_DATA_START, 1, 100, 1), true)
-        .setAllowInvalid(false).setHelpText("Select a category").build()
+        .setAllowInvalid(false)
+        .setHelpText("Input sheet › Category (B6): pick from your budget categories defined in the Config sheet.")
+        .build()
     );
   }
 
@@ -542,7 +552,9 @@ function createInputSheet(ss, config) {
   ws.getRange("B8").setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(["Chequing", "Savings", "Credit Card", "Cash", "Other"], true)
-      .setAllowInvalid(true).build()
+      .setAllowInvalid(true)
+      .setHelpText("Input sheet › Account (B8): pick the account used for this transaction.")
+      .build()
   );
 
   // ── Row 10: spacer ────────────────────────────────────────
@@ -627,6 +639,12 @@ function submitTransaction() {
   // Uncheck the box immediately regardless of outcome
   inputWs.getRange("B11").setValue(false);
 
+  // Auto-categorize via AutoCat rules if category was left blank
+  if (!cat && desc) {
+    const matched = applyAutoCatRules(desc, getAutoCatRules());
+    if (matched) cat = matched;
+  }
+
   // Validate required fields
   if (!dateVal || !cat || !amount) {
     statusCell
@@ -702,7 +720,7 @@ function createTransactionSheet(ss, config) {
       SpreadsheetApp.newDataValidation()
         .requireValueInRange(configWs.getRange(CFG_CAT_DATA_START, 1, 100, 1), true)
         .setAllowInvalid(false)
-        .setHelpText("Select a budget category")
+        .setHelpText("Transactions sheet › Category (col C): pick a budget category from the Config sheet.")
         .build()
     );
   }
@@ -712,6 +730,7 @@ function createTransactionSheet(ss, config) {
     SpreadsheetApp.newDataValidation()
       .requireValueInList(["Chequing", "Savings", "Credit Card", "Cash", "Other"], true)
       .setAllowInvalid(true)
+      .setHelpText("Transactions sheet › Account (col E): pick the account used for this transaction.")
       .build()
   );
 
@@ -1397,6 +1416,154 @@ function refreshDashboard() {
   createDashboard(ss, config);
   SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(
     ss.getSheetByName(SHEET_DASHBOARD)
+  );
+}
+
+// ============================================================
+// AUTOCAT SHEET
+// ============================================================
+
+/**
+ * Creates (or recreates) the AutoCat sheet.
+ * Layout: Row 1 = title, Row 2 = column headers, Row 3+ = keyword/category rules.
+ * Col A = Keyword (description contains), Col B = Category
+ */
+function createAutoCatSheet(ss, config) {
+  let ws = ss.getSheetByName(SHEET_AUTOCAT);
+  if (ws) ss.deleteSheet(ws);
+  ws = ss.insertSheet(SHEET_AUTOCAT);
+
+  ws.setColumnWidth(1, 260);  // Keyword
+  ws.setColumnWidth(2, 230);  // Category
+  if (ws.getMaxColumns() > 2) ws.hideColumns(3, ws.getMaxColumns() - 2);
+
+  // ── Row 1: Title ─────────────────────────────────────────
+  ws.setRowHeight(1, 36);
+  ws.getRange(1, 1, 1, 2).merge()
+    .setValue("🏷  AutoCat Rules")
+    .setBackground(CLR.PRIMARY).setFontColor(CLR.WHITE)
+    .setFontWeight("bold").setFontSize(14)
+    .setHorizontalAlignment("center").setVerticalAlignment("middle");
+
+  // ── Row 2: Column headers ─────────────────────────────────
+  ws.setRowHeight(2, 28);
+  ws.getRange(2, 1, 1, 2)
+    .setValues([["Keyword (description contains)", "Category"]])
+    .setBackground(CLR.ACCENT).setFontColor(CLR.WHITE)
+    .setFontWeight("bold").setFontSize(10)
+    .setHorizontalAlignment("center").setVerticalAlignment("middle");
+  ws.setFrozenRows(2);
+
+  // ── Row 3+: Rules data ────────────────────────────────────
+  // Category dropdown — live from Config col A
+  const configWs = ss.getSheetByName(SHEET_CONFIG);
+  if (configWs) {
+    ws.getRange(3, 2, 100, 1).setDataValidation(
+      SpreadsheetApp.newDataValidation()
+        .requireValueInRange(configWs.getRange(CFG_CAT_DATA_START, 1, 100, 1), true)
+        .setAllowInvalid(false)
+        .setHelpText("AutoCat sheet › Category (col B): pick the category to assign when the keyword is matched.")
+        .build()
+    );
+  }
+
+  // Style the data rows
+  ws.getRange(3, 1, 100, 1)
+    .setBackground("#FFFDE7")
+    .setBorder(true, true, true, true, null, null, "#FB8C00", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  ws.getRange(3, 2, 100, 1).setBackground("#FFFDE7");
+
+  // Seed example rules from configured categories
+  const firstIncome  = config.incomeCategories  && config.incomeCategories.length  > 0 ? config.incomeCategories[0].label  : "";
+  const firstExpense = config.expenseCategories && config.expenseCategories.length > 0 ? config.expenseCategories[0].label : "";
+  ws.getRange(3, 1, 3, 2).setValues([
+    ["salary",  firstIncome],
+    ["grocery", firstExpense],
+    ["amazon",  ""],
+  ]);
+
+  // ── Tip row ───────────────────────────────────────────────
+  ws.setRowHeight(104, 48);
+  ws.getRange(104, 1, 1, 2).merge()
+    .setValue("💡  Rules are checked top-to-bottom; the first keyword match wins.\n" +
+              "Matching is case-insensitive (\"uber\" matches \"UBER Eats\").\n" +
+              "Run  💰 Budget Tools › Apply AutoCat Rules  to fill in empty categories on existing transactions.")
+    .setBackground("#FFF8E1").setFontSize(9).setFontStyle("italic").setFontColor("#555")
+    .setWrap(true).setVerticalAlignment("middle");
+}
+
+// ============================================================
+// AUTOCAT
+// ============================================================
+
+/**
+ * Reads AutoCat keyword→category rules from the Config sheet.
+ * Scans col A for CFG_AUTOCAT_HEADER, then reads (keyword, category) pairs
+ * from the two columns below the column-header row until the first empty keyword.
+ * @returns {Array<{keyword: string, category: string}>}
+ */
+function getAutoCatRules() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ws = ss.getSheetByName(SHEET_AUTOCAT);
+  if (!ws) return [];
+
+  const lastRow = ws.getLastRow();
+  if (lastRow < 3) return []; // rows 1-2 are title + headers
+
+  const data = ws.getRange(3, 1, lastRow - 2, 2).getValues(); // col A=keyword, col B=category
+
+  const rules = [];
+  for (let i = 0; i < data.length; i++) {
+    const keyword  = String(data[i][0]).trim();
+    const category = String(data[i][1]).trim();
+    if (!keyword) break;
+    if (category) rules.push({ keyword, category });
+  }
+  return rules;
+}
+
+/**
+ * Scans the Transactions sheet for rows with an empty Category column and
+ * applies AutoCat rules to them. Called from the menu.
+ */
+function applyAutoCatToTransactions() {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const txWs = ss.getSheetByName(SHEET_TRANSACTIONS);
+  if (!txWs) return;
+
+  const rules = getAutoCatRules();
+  if (rules.length === 0) {
+    SpreadsheetApp.getUi().alert(
+      "No AutoCat rules found.\n\n" +
+      "Add keyword → category rules in the Config sheet under \"" + CFG_AUTOCAT_HEADER + "\"."
+    );
+    return;
+  }
+
+  const lastRow = txWs.getLastRow();
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert("No transactions found.");
+    return;
+  }
+
+  const data = txWs.getRange(2, 1, lastRow - 1, 3).getValues(); // Date | Description | Category
+  let updated = 0;
+
+  data.forEach((row, i) => {
+    const desc = String(row[1]).trim();
+    const cat  = String(row[2]).trim();
+    if (cat) return; // already categorized — don't overwrite
+    const matched = applyAutoCatRules(desc, rules);
+    if (matched) {
+      txWs.getRange(i + 2, 3).setValue(matched);
+      updated++;
+    }
+  });
+
+  SpreadsheetApp.getUi().alert(
+    updated > 0
+      ? `✓ AutoCat applied: ${updated} transaction${updated === 1 ? "" : "s"} categorized.`
+      : "No uncategorized transactions matched any AutoCat rules."
   );
 }
 
